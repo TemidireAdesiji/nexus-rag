@@ -1,0 +1,58 @@
+name: Dependency Update Check
+
+on:
+  schedule:
+    - cron: "0 8 * * 1"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  check-python-deps:
+    name: Check Python Dependencies
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Install pip-audit
+        run: pip install pip-audit
+
+      - name: Audit gateway dependencies
+        run: |
+          pip install -r requirements.txt
+          pip-audit --fix --dry-run || true
+        working-directory: services/gateway
+
+  check-node-deps:
+    name: Check Node Dependencies
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        service: [data-api, ui]
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+
+      - name: Install dependencies
+        run: npm ci
+        working-directory: services/${{ matrix.service }}
+
+      - name: Run npm audit
+        run: npm audit --production || true
+        working-directory: services/${{ matrix.service }}
+
+      - name: Check for outdated packages
+        run: npm outdated || true
+        working-directory: services/${{ matrix.service }}
