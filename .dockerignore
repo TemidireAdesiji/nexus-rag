@@ -1,0 +1,67 @@
+# Version control
+.git
+.gitignore
+
+# Documentation
+*.md
+docs/
+examples/
+LICENSE
+
+# IDE and editor files
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+.DS_Store
+
+# Environment and secrets
+.env
+.env.*
+*.pem
+*.key
+
+# Python artifacts
+__pycache__/
+*.pyc
+*.pyo
+.pytest_cache/
+.ruff_cache/
+.mypy_cache/
+*.egg-info/
+dist/
+venv/
+.venv/
+
+# Node artifacts
+node_modules/
+npm-debug.log*
+yarn-debug.log*
+.npm/
+coverage/
+
+# Build output
+build/
+dist/
+
+# Deployment and infrastructure
+deploy/
+.github/
+terraform.tfstate*
+.terraform/
+
+# Testing
+*.test.*
+tests/
+__tests__/
+
+# Docker
+docker-compose*.yml
+Dockerfile*
+.dockerignore
+
+# Misc
+*.log
+tmp/
+.cache/

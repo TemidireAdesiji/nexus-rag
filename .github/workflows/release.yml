@@ -1,0 +1,111 @@
+name: NexusRAG Release
+
+on:
+  push:
+    tags:
+      - "v*"
+
+permissions:
+  contents: write
+  packages: write
+
+env:
+  REGISTRY: ghcr.io
+
+jobs:
+  build-and-push:
+    name: Build & Push ${{ matrix.service }}
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        service: [gateway, data-api, ui]
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Log in to GHCR
+        uses: docker/login-action@v3
+        with:
+          registry: ${{ env.REGISTRY }}
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Extract version from tag
+        id: version
+        run: echo "version=${GITHUB_REF#refs/tags/v}" >> "$GITHUB_OUTPUT"
+
+      - name: Extract metadata
+        id: meta
+        uses: docker/metadata-action@v5
+        with:
+          images: ${{ env.REGISTRY }}/${{ github.repository_owner }}/nexus-rag-${{ matrix.service }}
+          tags: |
+            type=semver,pattern={{version}}
+            type=semver,pattern={{major}}.{{minor}}
+            type=semver,pattern={{major}}
+            type=raw,value=latest
+
+      - name: Build and push image
+        uses: docker/build-push-action@v5
+        with:
+          context: services/${{ matrix.service }}
+          push: true
+          tags: ${{ steps.meta.outputs.tags }}
+          labels: ${{ steps.meta.outputs.labels }}
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+          build-args: |
+            VERSION=${{ steps.version.outputs.version }}
+            BUILD_SHA=${{ github.sha }}
+
+  create-release:
+    name: Create GitHub Release
+    runs-on: ubuntu-latest
+    needs: build-and-push
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Extract version from tag
+        id: version
+        run: echo "version=${GITHUB_REF#refs/tags/v}" >> "$GITHUB_OUTPUT"
+
+      - name: Generate changelog
+        id: changelog
+        run: |
+          PREVIOUS_TAG=$(git tag --sort=-version:refname | head -n 2 | tail -n 1)
+          if [[ -z "${PREVIOUS_TAG}" || "${PREVIOUS_TAG}" == "${GITHUB_REF#refs/tags/}" ]]; then
+            CHANGELOG="Initial release"
+          else
+            CHANGELOG=$(git log "${PREVIOUS_TAG}..HEAD" --pretty=format:"- %s (%h)" --no-merges)
+          fi
+          echo "changelog<<EOF" >> "$GITHUB_OUTPUT"
+          echo "${CHANGELOG}" >> "$GITHUB_OUTPUT"
+          echo "EOF" >> "$GITHUB_OUTPUT"
+
+      - name: Create GitHub Release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ github.ref_name }}
+          name: NexusRAG ${{ steps.version.outputs.version }}
+          body: |
+            ## NexusRAG ${{ steps.version.outputs.version }}
+
+            ### Docker Images
+            - `ghcr.io/${{ github.repository_owner }}/nexus-rag-gateway:${{ steps.version.outputs.version }}`
+            - `ghcr.io/${{ github.repository_owner }}/nexus-rag-data-api:${{ steps.version.outputs.version }}`
+            - `ghcr.io/${{ github.repository_owner }}/nexus-rag-ui:${{ steps.version.outputs.version }}`
+
+            ### Changes
+            ${{ steps.changelog.outputs.changelog }}
+          draft: false
+          prerelease: ${{ contains(github.ref_name, '-') }}
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
