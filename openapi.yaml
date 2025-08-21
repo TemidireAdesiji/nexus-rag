@@ -1,0 +1,667 @@
+openapi: 3.0.3
+info:
+  title: NexusRAG Gateway API
+  description: |
+    RESTful API for the NexusRAG retrieval-augmented generation platform.
+    Provides endpoints for document ingestion, intelligent querying with
+    multiple search strategies, conversation management, and system health.
+  version: 1.0.0
+  contact:
+    name: NexusRAG Team
+  license:
+    name: MIT
+    url: https://opensource.org/licenses/MIT
+
+servers:
+  - url: http://localhost:5000
+    description: Local development
+  - url: https://nexus-rag.example.com
+    description: Production
+
+tags:
+  - name: Inquiry
+    description: Query the RAG engine
+  - name: Conversations
+    description: Manage conversation sessions
+  - name: Ingestion
+    description: Document ingestion into the vector store
+  - name: Search
+    description: Search configuration
+  - name: Platform
+    description: Platform metadata and tooling
+  - name: Health
+    description: Service health and readiness
+
+paths:
+  /api/inquire:
+    post:
+      operationId: submitInquiry
+      tags: [Inquiry]
+      summary: Submit a question to the RAG engine
+      description: |
+        Sends a natural-language question and receives an AI-generated
+        answer grounded in retrieved documents.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/InquiryRequest"
+            example:
+              question: "What are the key principles of retrieval-augmented generation?"
+              conversation_id: "conv_abc123"
+              search_mode: "hybrid"
+      responses:
+        "200":
+          description: Inquiry answered successfully
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/InquiryResponse"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "500":
+          $ref: "#/components/responses/InternalError"
+
+  /api/inquire/completions:
+    post:
+      operationId: streamInquiryCompletions
+      tags: [Inquiry]
+      summary: Stream a response from the RAG engine
+      description: |
+        Sends a question and receives a streaming response via
+        server-sent events (SSE). Each chunk contains a partial answer.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/InquiryRequest"
+      responses:
+        "200":
+          description: Streaming response
+          content:
+            text/event-stream:
+              schema:
+                type: string
+                description: SSE stream of partial completion chunks
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "500":
+          $ref: "#/components/responses/InternalError"
+
+  /api/conversations:
+    get:
+      operationId: listConversations
+      tags: [Conversations]
+      summary: List all conversations
+      parameters:
+        - name: limit
+          in: query
+          schema:
+            type: integer
+            default: 20
+            minimum: 1
+            maximum: 100
+          description: Maximum number of conversations to return
+        - name: offset
+          in: query
+          schema:
+            type: integer
+            default: 0
+            minimum: 0
+          description: Number of conversations to skip
+      responses:
+        "200":
+          description: List of conversations
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  conversations:
+                    type: array
+                    items:
+                      $ref: "#/components/schemas/Conversation"
+                  total:
+                    type: integer
+                    example: 42
+    post:
+      operationId: createConversation
+      tags: [Conversations]
+      summary: Create a new conversation
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                title:
+                  type: string
+                  example: "RAG Architecture Discussion"
+                metadata:
+                  type: object
+                  additionalProperties: true
+      responses:
+        "201":
+          description: Conversation created
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Conversation"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+
+  /api/conversations/{conversationId}:
+    get:
+      operationId: getConversation
+      tags: [Conversations]
+      summary: Get a conversation by ID
+      parameters:
+        - $ref: "#/components/parameters/ConversationId"
+      responses:
+        "200":
+          description: Conversation details with messages
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ConversationDetail"
+        "404":
+          $ref: "#/components/responses/NotFound"
+
+    put:
+      operationId: updateConversation
+      tags: [Conversations]
+      summary: Update a conversation
+      parameters:
+        - $ref: "#/components/parameters/ConversationId"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                title:
+                  type: string
+                metadata:
+                  type: object
+                  additionalProperties: true
+      responses:
+        "200":
+          description: Conversation updated
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Conversation"
+        "404":
+          $ref: "#/components/responses/NotFound"
+
+    delete:
+      operationId: deleteConversation
+      tags: [Conversations]
+      summary: Delete a conversation
+      parameters:
+        - $ref: "#/components/parameters/ConversationId"
+      responses:
+        "204":
+          description: Conversation deleted
+        "404":
+          $ref: "#/components/responses/NotFound"
+
+  /api/ingest:
+    post:
+      operationId: ingestDocuments
+      tags: [Ingestion]
+      summary: Ingest documents into the vector store
+      description: |
+        Accepts documents in various formats and processes them into
+        embeddings stored in the vector database for retrieval.
+      requestBody:
+        required: true
+        content:
+          multipart/form-data:
+            schema:
+              type: object
+              properties:
+                files:
+                  type: array
+                  items:
+                    type: string
+                    format: binary
+                  description: Document files to ingest (PDF, TXT, MD, DOCX)
+                collection:
+                  type: string
+                  default: "default"
+                  description: Target collection name
+                chunk_size:
+                  type: integer
+                  default: 1000
+                  description: Size of text chunks for splitting
+                chunk_overlap:
+                  type: integer
+                  default: 200
+                  description: Overlap between adjacent chunks
+          application/json:
+            schema:
+              type: object
+              properties:
+                texts:
+                  type: array
+                  items:
+                    type: string
+                  description: Raw text content to ingest
+                collection:
+                  type: string
+                  default: "default"
+                metadata:
+                  type: object
+                  additionalProperties: true
+      responses:
+        "200":
+          description: Documents ingested successfully
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  status:
+                    type: string
+                    example: "completed"
+                  documents_processed:
+                    type: integer
+                    example: 5
+                  chunks_created:
+                    type: integer
+                    example: 47
+                  collection:
+                    type: string
+                    example: "default"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "500":
+          $ref: "#/components/responses/InternalError"
+
+  /api/search-modes:
+    get:
+      operationId: listSearchModes
+      tags: [Search]
+      summary: List available search modes
+      description: Returns all supported retrieval strategies and their descriptions.
+      responses:
+        "200":
+          description: Available search modes
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  modes:
+                    type: array
+                    items:
+                      type: object
+                      properties:
+                        id:
+                          type: string
+                          example: "hybrid"
+                        name:
+                          type: string
+                          example: "Hybrid Search"
+                        description:
+                          type: string
+                          example: "Combines semantic and keyword search for optimal retrieval"
+                        enabled:
+                          type: boolean
+                          example: true
+
+  /api/platform/info:
+    get:
+      operationId: getPlatformInfo
+      tags: [Platform]
+      summary: Get platform information
+      description: Returns version, build metadata, and runtime configuration.
+      responses:
+        "200":
+          description: Platform information
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  name:
+                    type: string
+                    example: "NexusRAG"
+                  version:
+                    type: string
+                    example: "1.0.0"
+                  build_sha:
+                    type: string
+                    example: "a1b2c3d"
+                  python_version:
+                    type: string
+                    example: "3.11.8"
+                  environment:
+                    type: string
+                    enum: [development, staging, production]
+                    example: "production"
+
+  /api/platform/tools:
+    get:
+      operationId: getPlatformTools
+      tags: [Platform]
+      summary: List available agent tools
+      description: Returns the registered tools available to the RAG agent.
+      responses:
+        "200":
+          description: List of tools
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  tools:
+                    type: array
+                    items:
+                      type: object
+                      properties:
+                        name:
+                          type: string
+                          example: "web_search"
+                        description:
+                          type: string
+                          example: "Search the web for current information"
+                        enabled:
+                          type: boolean
+                          example: true
+
+  /alive:
+    get:
+      operationId: livenessCheck
+      tags: [Health]
+      summary: Liveness probe
+      description: Returns 200 if the process is running. Used by Kubernetes liveness probes.
+      responses:
+        "200":
+          description: Service is alive
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/HealthStatus"
+              example:
+                status: "alive"
+                timestamp: "2025-01-15T10:30:00Z"
+
+  /ready:
+    get:
+      operationId: readinessCheck
+      tags: [Health]
+      summary: Readiness probe
+      description: |
+        Returns 200 if the service is ready to accept traffic.
+        Checks connectivity to MongoDB, Redis, and the vector store.
+      responses:
+        "200":
+          description: Service is ready
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ReadinessStatus"
+        "503":
+          description: Service is not ready
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ReadinessStatus"
+
+  /health:
+    get:
+      operationId: healthCheck
+      tags: [Health]
+      summary: Detailed health check
+      description: |
+        Returns comprehensive health information including status of all
+        dependent services and resource utilization.
+      responses:
+        "200":
+          description: Service is healthy
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/DetailedHealth"
+        "503":
+          description: Service is degraded or unhealthy
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/DetailedHealth"
+
+components:
+  parameters:
+    ConversationId:
+      name: conversationId
+      in: path
+      required: true
+      schema:
+        type: string
+      description: Unique conversation identifier
+
+  schemas:
+    InquiryRequest:
+      type: object
+      required:
+        - question
+      properties:
+        question:
+          type: string
+          minLength: 1
+          maxLength: 4000
+          description: The natural-language question to answer
+        conversation_id:
+          type: string
+          description: Optional conversation ID for context continuity
+        search_mode:
+          type: string
+          enum: [semantic, keyword, hybrid, agentic]
+          default: hybrid
+          description: Retrieval strategy to use
+        max_sources:
+          type: integer
+          default: 5
+          minimum: 1
+          maximum: 20
+          description: Maximum number of source documents to retrieve
+        temperature:
+          type: number
+          format: float
+          default: 0.7
+          minimum: 0.0
+          maximum: 2.0
+          description: LLM temperature for response generation
+
+    InquiryResponse:
+      type: object
+      properties:
+        answer:
+          type: string
+          description: Generated answer grounded in retrieved documents
+        conversation_id:
+          type: string
+          description: Conversation ID (created if not provided)
+        sources:
+          type: array
+          items:
+            $ref: "#/components/schemas/Source"
+        search_mode:
+          type: string
+          description: Search mode used for retrieval
+        latency_ms:
+          type: number
+          format: float
+          description: Total response latency in milliseconds
+
+    Source:
+      type: object
+      properties:
+        document_id:
+          type: string
+        title:
+          type: string
+        content_snippet:
+          type: string
+        relevance_score:
+          type: number
+          format: float
+        metadata:
+          type: object
+          additionalProperties: true
+
+    Conversation:
+      type: object
+      properties:
+        id:
+          type: string
+        title:
+          type: string
+        created_at:
+          type: string
+          format: date-time
+        updated_at:
+          type: string
+          format: date-time
+        message_count:
+          type: integer
+        metadata:
+          type: object
+          additionalProperties: true
+
+    ConversationDetail:
+      allOf:
+        - $ref: "#/components/schemas/Conversation"
+        - type: object
+          properties:
+            messages:
+              type: array
+              items:
+                type: object
+                properties:
+                  role:
+                    type: string
+                    enum: [user, assistant, system]
+                  content:
+                    type: string
+                  timestamp:
+                    type: string
+                    format: date-time
+                  sources:
+                    type: array
+                    items:
+                      $ref: "#/components/schemas/Source"
+
+    HealthStatus:
+      type: object
+      properties:
+        status:
+          type: string
+          enum: [alive, not_alive]
+        timestamp:
+          type: string
+          format: date-time
+
+    ReadinessStatus:
+      type: object
+      properties:
+        status:
+          type: string
+          enum: [ready, not_ready]
+        checks:
+          type: object
+          properties:
+            mongodb:
+              type: boolean
+            redis:
+              type: boolean
+            vector_store:
+              type: boolean
+        timestamp:
+          type: string
+          format: date-time
+
+    DetailedHealth:
+      type: object
+      properties:
+        status:
+          type: string
+          enum: [healthy, degraded, unhealthy]
+        version:
+          type: string
+        uptime_seconds:
+          type: number
+        dependencies:
+          type: object
+          properties:
+            mongodb:
+              $ref: "#/components/schemas/DependencyHealth"
+            redis:
+              $ref: "#/components/schemas/DependencyHealth"
+            vector_store:
+              $ref: "#/components/schemas/DependencyHealth"
+            data_api:
+              $ref: "#/components/schemas/DependencyHealth"
+        timestamp:
+          type: string
+          format: date-time
+
+    DependencyHealth:
+      type: object
+      properties:
+        status:
+          type: string
+          enum: [up, down, degraded]
+        latency_ms:
+          type: number
+          format: float
+        details:
+          type: string
+
+    ErrorResponse:
+      type: object
+      properties:
+        error:
+          type: string
+        message:
+          type: string
+        details:
+          type: object
+          additionalProperties: true
+
+  responses:
+    BadRequest:
+      description: Invalid request parameters
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/ErrorResponse"
+          example:
+            error: "bad_request"
+            message: "The 'question' field is required and must not be empty."
+
+    NotFound:
+      description: Resource not found
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/ErrorResponse"
+          example:
+            error: "not_found"
+            message: "Conversation not found."
+
+    InternalError:
+      description: Internal server error
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/ErrorResponse"
+          example:
+            error: "internal_error"
+            message: "An unexpected error occurred."
