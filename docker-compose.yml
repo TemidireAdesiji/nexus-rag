@@ -1,0 +1,119 @@
+version: "3.9"
+
+services:
+  mongodb:
+    image: mongo:7.0
+    container_name: nexus-mongodb
+    restart: unless-stopped
+    ports:
+      - "27017:27017"
+    environment:
+      MONGO_INITDB_ROOT_USERNAME: nexus_admin
+      MONGO_INITDB_ROOT_PASSWORD: nexus_secret_pwd
+      MONGO_INITDB_DATABASE: nexus_rag
+    volumes:
+      - mongo_storage:/data/db
+    networks:
+      - nexus-network
+    healthcheck:
+      test: ["CMD", "mongosh", "--eval", "db.adminCommand('ping')"]
+      interval: 15s
+      timeout: 5s
+      retries: 5
+      start_period: 20s
+
+  redis:
+    image: redis:7-alpine
+    container_name: nexus-redis
+    restart: unless-stopped
+    ports:
+      - "6379:6379"
+    command: redis-server --appendonly yes --maxmemory 128mb --maxmemory-policy allkeys-lru
+    volumes:
+      - redis_storage:/data
+    networks:
+      - nexus-network
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 3s
+      retries: 5
+
+  data-api:
+    build:
+      context: ./services/data-api
+      dockerfile: Dockerfile
+    container_name: nexus-data-api
+    restart: unless-stopped
+    ports:
+      - "3456:3456"
+    environment:
+      NODE_ENV: development
+      PORT: "3456"
+      MONGODB_URI: mongodb://nexus_admin:nexus_secret_pwd@mongodb:27017/nexus_rag?authSource=admin
+      API_BEARER_TOKEN: ${API_BEARER_TOKEN:-nexus-dev-token}
+      REDIS_URL: redis://redis:6379
+    depends_on:
+      mongodb:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    networks:
+      - nexus-network
+
+  gateway:
+    build:
+      context: ./services/gateway
+      dockerfile: Dockerfile
+    container_name: nexus-gateway
+    restart: unless-stopped
+    ports:
+      - "8000:8000"
+    environment:
+      PYTHONUNBUFFERED: "1"
+      PORT: "8000"
+      DATA_API_URL: http://data-api:3456
+      DATA_API_TOKEN: ${API_BEARER_TOKEN:-nexus-dev-token}
+      REDIS_URL: redis://redis:6379
+      MONGODB_URI: mongodb://nexus_admin:nexus_secret_pwd@mongodb:27017/nexus_rag?authSource=admin
+      CHROMA_PERSIST_DIR: /app/chroma_data
+      OPENAI_API_KEY: ${OPENAI_API_KEY:-}
+    volumes:
+      - chroma_data:/app/chroma_data
+    depends_on:
+      data-api:
+        condition: service_started
+      redis:
+        condition: service_healthy
+    networks:
+      - nexus-network
+
+  ui:
+    build:
+      context: ./services/ui
+      dockerfile: Dockerfile
+    container_name: nexus-ui
+    restart: unless-stopped
+    ports:
+      - "3000:80"
+    environment:
+      VITE_GATEWAY_URL: http://localhost:8000
+      VITE_DATA_API_URL: http://localhost:3456
+    depends_on:
+      gateway:
+        condition: service_started
+    networks:
+      - nexus-network
+
+networks:
+  nexus-network:
+    driver: bridge
+    name: nexus-network
+
+volumes:
+  mongo_storage:
+    driver: local
+  redis_storage:
+    driver: local
+  chroma_data:
+    driver: local
