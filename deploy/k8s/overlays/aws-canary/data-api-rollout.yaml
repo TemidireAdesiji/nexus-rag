@@ -1,0 +1,70 @@
+apiVersion: argoproj.io/v1alpha1
+kind: Rollout
+metadata:
+  name: nexus-data-api
+  namespace: nexus-rag
+  labels:
+    app.kubernetes.io/name: data-api
+    app.kubernetes.io/component: api-server
+    app.kubernetes.io/part-of: nexus-rag
+spec:
+  replicas: 2
+  revisionHistoryLimit: 3
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: data-api
+  strategy:
+    canary:
+      steps:
+        - setWeight: 20
+        - pause: { duration: 2m }
+        - setWeight: 50
+        - pause: { duration: 3m }
+        - setWeight: 100
+      canaryService: nexus-data-api-canary
+      stableService: nexus-data-api
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: data-api
+        app.kubernetes.io/component: api-server
+        app.kubernetes.io/part-of: nexus-rag
+    spec:
+      containers:
+        - name: data-api
+          image: ghcr.io/OWNER/nexus-rag-data-api:latest
+          ports:
+            - containerPort: 3456
+              protocol: TCP
+              name: http
+          envFrom:
+            - configMapRef:
+                name: nexus-rag-config
+            - secretRef:
+                name: nexus-rag-secrets
+          env:
+            - name: PORT
+              value: "3456"
+          resources:
+            requests:
+              cpu: 200m
+              memory: 256Mi
+            limits:
+              cpu: 500m
+              memory: 512Mi
+          livenessProbe:
+            httpGet:
+              path: /ping
+              port: http
+            initialDelaySeconds: 10
+            periodSeconds: 15
+            timeoutSeconds: 5
+            failureThreshold: 3
+          readinessProbe:
+            httpGet:
+              path: /ping
+              port: http
+            initialDelaySeconds: 5
+            periodSeconds: 10
+            timeoutSeconds: 3
+            failureThreshold: 3
