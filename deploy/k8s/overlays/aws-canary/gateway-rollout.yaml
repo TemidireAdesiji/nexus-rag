@@ -1,0 +1,79 @@
+apiVersion: argoproj.io/v1alpha1
+kind: Rollout
+metadata:
+  name: nexus-gateway
+  namespace: nexus-rag
+  labels:
+    app.kubernetes.io/name: gateway
+    app.kubernetes.io/component: rag-engine
+    app.kubernetes.io/part-of: nexus-rag
+spec:
+  replicas: 2
+  revisionHistoryLimit: 3
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: gateway
+  strategy:
+    canary:
+      steps:
+        - setWeight: 10
+        - pause: { duration: 2m }
+        - setWeight: 30
+        - pause: { duration: 2m }
+        - setWeight: 60
+        - pause: { duration: 3m }
+        - setWeight: 100
+      canaryService: nexus-gateway-canary
+      stableService: nexus-gateway
+      trafficRouting:
+        nginx:
+          stableIngress: nexus-rag-ingress
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: gateway
+        app.kubernetes.io/component: rag-engine
+        app.kubernetes.io/part-of: nexus-rag
+    spec:
+      containers:
+        - name: gateway
+          image: ghcr.io/OWNER/nexus-rag-gateway:latest
+          ports:
+            - containerPort: 5000
+              protocol: TCP
+              name: http
+          envFrom:
+            - configMapRef:
+                name: nexus-rag-config
+            - secretRef:
+                name: nexus-rag-secrets
+          resources:
+            requests:
+              cpu: 500m
+              memory: 1Gi
+            limits:
+              cpu: "2"
+              memory: 2Gi
+          livenessProbe:
+            httpGet:
+              path: /alive
+              port: http
+            initialDelaySeconds: 15
+            periodSeconds: 20
+            timeoutSeconds: 5
+            failureThreshold: 3
+          readinessProbe:
+            httpGet:
+              path: /ready
+              port: http
+            initialDelaySeconds: 10
+            periodSeconds: 10
+            timeoutSeconds: 3
+            failureThreshold: 3
+          volumeMounts:
+            - name: chroma-storage
+              mountPath: /app/chroma_data
+      volumes:
+        - name: chroma-storage
+          persistentVolumeClaim:
+            claimName: nexus-chroma-pvc
