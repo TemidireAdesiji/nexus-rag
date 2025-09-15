@@ -1,0 +1,29 @@
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+
+namespace: nexus-rag
+
+resources:
+  - ../../base
+
+patchesStrategicMerge:
+  - gateway-patch.yaml
+  - ingress-patch.yaml
+
+images:
+  - name: ghcr.io/OWNER/nexus-rag-gateway
+    newName: ghcr.io/OWNER/nexus-rag-gateway
+    newTag: latest
+  - name: ghcr.io/OWNER/nexus-rag-data-api
+    newName: ghcr.io/OWNER/nexus-rag-data-api
+    newTag: latest
+  - name: ghcr.io/OWNER/nexus-rag-ui
+    newName: ghcr.io/OWNER/nexus-rag-ui
+    newTag: latest
+
+configMapGenerator:
+  - name: nexus-rag-config
+    behavior: merge
+    literals:
+      - CLOUD_PROVIDER=aws
+      - AWS_REGION=us-east-1
