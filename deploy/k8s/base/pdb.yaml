@@ -1,0 +1,41 @@
+apiVersion: policy/v1
+kind: PodDisruptionBudget
+metadata:
+  name: nexus-gateway-pdb
+  namespace: nexus-rag
+  labels:
+    app.kubernetes.io/name: gateway
+    app.kubernetes.io/part-of: nexus-rag
+spec:
+  minAvailable: 1
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: gateway
+---
+apiVersion: policy/v1
+kind: PodDisruptionBudget
+metadata:
+  name: nexus-data-api-pdb
+  namespace: nexus-rag
+  labels:
+    app.kubernetes.io/name: data-api
+    app.kubernetes.io/part-of: nexus-rag
+spec:
+  minAvailable: 1
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: data-api
+---
+apiVersion: policy/v1
+kind: PodDisruptionBudget
+metadata:
+  name: nexus-ui-pdb
+  namespace: nexus-rag
+  labels:
+    app.kubernetes.io/name: ui
+    app.kubernetes.io/part-of: nexus-rag
+spec:
+  minAvailable: 1
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: ui
