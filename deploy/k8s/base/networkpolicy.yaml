@@ -1,0 +1,135 @@
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: nexus-default-deny
+  namespace: nexus-rag
+  labels:
+    app.kubernetes.io/part-of: nexus-rag
+spec:
+  podSelector: {}
+  policyTypes:
+    - Ingress
+---
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: nexus-gateway-netpol
+  namespace: nexus-rag
+  labels:
+    app.kubernetes.io/name: gateway
+    app.kubernetes.io/part-of: nexus-rag
+spec:
+  podSelector:
+    matchLabels:
+      app.kubernetes.io/name: gateway
+  policyTypes:
+    - Ingress
+  ingress:
+    - from:
+        - podSelector:
+            matchLabels:
+              app.kubernetes.io/name: ui
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: ingress-nginx
+      ports:
+        - port: 5000
+          protocol: TCP
+---
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: nexus-data-api-netpol
+  namespace: nexus-rag
+  labels:
+    app.kubernetes.io/name: data-api
+    app.kubernetes.io/part-of: nexus-rag
+spec:
+  podSelector:
+    matchLabels:
+      app.kubernetes.io/name: data-api
+  policyTypes:
+    - Ingress
+  ingress:
+    - from:
+        - podSelector:
+            matchLabels:
+              app.kubernetes.io/name: gateway
+      ports:
+        - port: 3456
+          protocol: TCP
+---
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: nexus-ui-netpol
+  namespace: nexus-rag
+  labels:
+    app.kubernetes.io/name: ui
+    app.kubernetes.io/part-of: nexus-rag
+spec:
+  podSelector:
+    matchLabels:
+      app.kubernetes.io/name: ui
+  policyTypes:
+    - Ingress
+  ingress:
+    - from:
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: ingress-nginx
+      ports:
+        - port: 80
+          protocol: TCP
+---
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: nexus-mongodb-netpol
+  namespace: nexus-rag
+  labels:
+    app.kubernetes.io/name: mongodb
+    app.kubernetes.io/part-of: nexus-rag
+spec:
+  podSelector:
+    matchLabels:
+      app.kubernetes.io/name: mongodb
+  policyTypes:
+    - Ingress
+  ingress:
+    - from:
+        - podSelector:
+            matchLabels:
+              app.kubernetes.io/name: gateway
+        - podSelector:
+            matchLabels:
+              app.kubernetes.io/name: data-api
+      ports:
+        - port: 27017
+          protocol: TCP
+---
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: nexus-redis-netpol
+  namespace: nexus-rag
+  labels:
+    app.kubernetes.io/name: redis
+    app.kubernetes.io/part-of: nexus-rag
+spec:
+  podSelector:
+    matchLabels:
+      app.kubernetes.io/name: redis
+  policyTypes:
+    - Ingress
+  ingress:
+    - from:
+        - podSelector:
+            matchLabels:
+              app.kubernetes.io/name: gateway
+        - podSelector:
+            matchLabels:
+              app.kubernetes.io/name: data-api
+      ports:
+        - port: 6379
+          protocol: TCP

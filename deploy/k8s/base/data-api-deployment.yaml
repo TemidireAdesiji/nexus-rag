@@ -1,0 +1,67 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: nexus-data-api
+  namespace: nexus-rag
+  labels:
+    app.kubernetes.io/name: data-api
+    app.kubernetes.io/component: api-server
+    app.kubernetes.io/part-of: nexus-rag
+spec:
+  replicas: 2
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: data-api
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: data-api
+        app.kubernetes.io/component: api-server
+        app.kubernetes.io/part-of: nexus-rag
+    spec:
+      terminationGracePeriodSeconds: 30
+      containers:
+        - name: data-api
+          image: ghcr.io/OWNER/nexus-rag-data-api:latest
+          ports:
+            - containerPort: 3456
+              protocol: TCP
+              name: http
+          envFrom:
+            - configMapRef:
+                name: nexus-rag-config
+            - secretRef:
+                name: nexus-rag-secrets
+          env:
+            - name: PORT
+              value: "3456"
+          resources:
+            requests:
+              cpu: 200m
+              memory: 256Mi
+            limits:
+              cpu: 500m
+              memory: 512Mi
+          livenessProbe:
+            httpGet:
+              path: /ping
+              port: http
+            initialDelaySeconds: 10
+            periodSeconds: 15
+            timeoutSeconds: 5
+            failureThreshold: 3
+          readinessProbe:
+            httpGet:
+              path: /ping
+              port: http
+            initialDelaySeconds: 5
+            periodSeconds: 10
+            timeoutSeconds: 3
+            failureThreshold: 3
+          startupProbe:
+            httpGet:
+              path: /ping
+              port: http
+            initialDelaySeconds: 3
+            periodSeconds: 5
+            failureThreshold: 10
